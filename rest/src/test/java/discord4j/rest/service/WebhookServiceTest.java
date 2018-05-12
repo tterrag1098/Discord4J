@@ -29,6 +29,7 @@ import discord4j.rest.http.JacksonWriterStrategy;
 import discord4j.rest.http.client.SimpleHttpClient;
 import discord4j.rest.json.request.WebhookModifyRequest;
 import discord4j.rest.request.Router;
+import discord4j.rest.request.DefaultRouter;
 import discord4j.rest.route.Routes;
 import org.junit.Test;
 import reactor.core.scheduler.Schedulers;
@@ -60,7 +61,7 @@ public class WebhookServiceTest {
                 .writerStrategy(new EmptyWriterStrategy())
                 .build();
 
-        Router router = new Router(httpClient, Schedulers.elastic());
+        Router router = new DefaultRouter(httpClient, Schedulers.elastic());
 
         return webhookService = new WebhookService(router);
     }

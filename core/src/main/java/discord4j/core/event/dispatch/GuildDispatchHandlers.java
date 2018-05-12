@@ -108,10 +108,10 @@ class GuildDispatchHandlers {
                         .map(voiceState -> Tuples.of(LongLongTuple2.of(guildBean.getId(), voiceState.getUserId()),
                                 new VoiceStateBean(voiceState, guildBean.getId()))));
 
-        Mono<Void> startMemberChunk = Mono.fromRunnable(() -> {
-            context.getServiceMediator().getGatewayClient().sender()
-                    .next(GatewayPayload.requestGuildMembers(new RequestGuildMembers(guildBean.getId(), "", 0)));
-        });
+        Mono<Void> startMemberChunk = context.getServiceMediator().getGatewayClient()
+                .send(Mono.just(GatewayPayload.requestGuildMembers(
+                        new RequestGuildMembers(guildBean.getId(), "", 0))))
+                .then();
 
         return saveGuild
                 .then(saveChannels)

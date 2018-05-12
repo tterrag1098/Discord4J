@@ -22,13 +22,17 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import discord4j.common.jackson.PossibleModule;
+import discord4j.core.event.DefaultEventMapperFactory;
 import discord4j.core.event.EventDispatcher;
+import discord4j.core.event.EventMapper;
+import discord4j.core.event.EventMapperFactory;
 import discord4j.core.event.dispatch.DispatchContext;
-import discord4j.core.event.dispatch.DispatchHandlers;
 import discord4j.core.event.domain.Event;
 import discord4j.core.object.presence.Presence;
 import discord4j.core.util.VersionUtil;
+import discord4j.gateway.DefaultGatewayClientFactory;
 import discord4j.gateway.GatewayClient;
+import discord4j.gateway.GatewayClientFactory;
 import discord4j.gateway.IdentifyOptions;
 import discord4j.gateway.json.dispatch.Dispatch;
 import discord4j.gateway.payload.JacksonPayloadReader;
@@ -37,7 +41,8 @@ import discord4j.gateway.retry.RetryOptions;
 import discord4j.rest.RestClient;
 import discord4j.rest.http.*;
 import discord4j.rest.http.client.SimpleHttpClient;
-import discord4j.rest.request.Router;
+import discord4j.rest.request.DefaultRouterFactory;
+import discord4j.rest.request.RouterFactory;
 import discord4j.rest.route.Routes;
 import discord4j.store.service.StoreService;
 import discord4j.store.service.StoreServiceLoader;
@@ -66,6 +71,9 @@ public final class ClientBuilder {
     private Presence initialPresence;
     private IdentifyOptions identifyOptions;
     private RetryOptions retryOptions;
+    private GatewayClientFactory gatewayClientFactory;
+    private EventMapperFactory eventMapperFactory;
+    private RouterFactory routerFactory;
 
     public ClientBuilder(final String token) {
         this.token = Objects.requireNonNull(token);
@@ -73,6 +81,11 @@ public final class ClientBuilder {
         eventProcessor = EmitterProcessor.create(false);
         eventScheduler = Schedulers.elastic();
         retryOptions = new RetryOptions(Duration.ofSeconds(2), Duration.ofSeconds(120), Integer.MAX_VALUE);
+        initialPresence = Presence.online();
+        identifyOptions = new IdentifyOptions(0, 1, null);
+        gatewayClientFactory = new DefaultGatewayClientFactory();
+        eventMapperFactory = new DefaultEventMapperFactory();
+        routerFactory = new DefaultRouterFactory();
     }
 
     public String getToken() {
@@ -151,8 +164,36 @@ public final class ClientBuilder {
         return retryOptions;
     }
 
-    public void setRetryOptions(RetryOptions retryOptions) {
+    public ClientBuilder setRetryOptions(RetryOptions retryOptions) {
         this.retryOptions = retryOptions;
+        return this;
+    }
+
+    public GatewayClientFactory getGatewayClientFactory() {
+        return gatewayClientFactory;
+    }
+
+    public ClientBuilder setGatewayClientFactory(GatewayClientFactory gatewayClientFactory) {
+        this.gatewayClientFactory = gatewayClientFactory;
+        return this;
+    }
+
+    public EventMapperFactory getEventMapperFactory() {
+        return eventMapperFactory;
+    }
+
+    public ClientBuilder setEventMapperFactory(EventMapperFactory eventMapperFactory) {
+        this.eventMapperFactory = eventMapperFactory;
+        return this;
+    }
+
+    public RouterFactory getRouterFactory() {
+        return routerFactory;
+    }
+
+    public ClientBuilder setRouterFactory(RouterFactory routerFactory) {
+        this.routerFactory = routerFactory;
+        return this;
     }
 
     public DiscordClient build() {
@@ -186,22 +227,23 @@ public final class ClientBuilder {
             throw new IllegalArgumentException("The provided shard index is incompatible with the requested shard count!");
         }
 
-        final GatewayClient gatewayClient = new GatewayClient(
+        final GatewayClient gatewayClient = gatewayClientFactory.getGatewayClient(
                 new JacksonPayloadReader(mapper), new JacksonPayloadWriter(mapper),
                 retryOptions, token, identifyOptions);
 
         final StateHolder stateHolder = new StateHolder(storeService);
-        final RestClient restClient = new RestClient(new Router(httpClient, Schedulers.elastic())); // TODO parametrize
+        final RestClient restClient = new RestClient(routerFactory.getRouter(httpClient)); // TODO parametrize
         final ClientConfig config = new ClientConfig(token, identifyOptions.getShardIndex(),
                 identifyOptions.getShardCount());
         final EventDispatcher eventDispatcher = new EventDispatcher(eventProcessor, eventScheduler);
 
         final ServiceMediator serviceMediator = new ServiceMediator(gatewayClient, restClient, storeService,
                 stateHolder, eventDispatcher, config);
+        final EventMapper eventMapper = eventMapperFactory.getEventMapper();
 
         serviceMediator.getGatewayClient().dispatch()
                 .map(dispatch -> DispatchContext.of(dispatch, serviceMediator))
-                .flatMap(DispatchHandlers::<Dispatch, Event>handle)
+                .flatMap(eventMapper::<Dispatch, Event>handle)
                 .subscribeWith(eventProcessor);
 
         final String name = properties.getProperty(VersionUtil.APPLICATION_NAME, "Discord4J");

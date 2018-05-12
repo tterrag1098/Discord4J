@@ -67,7 +67,7 @@ public class DiscordHandlerTest {
                 GatewayPayload<Identify> identify = GatewayPayload.identify(new Identify(token, properties, true, 250,
                         Possible.absent(), Possible.absent()));
 
-                handler.outbound().onNext(identify);
+                handler.outbound().next(identify);
             } else if (payload.getData() instanceof Dispatch) {
                 seq.set(payload.getSequence());
                 dispatch.onNext((Dispatch) payload.getData());
@@ -79,7 +79,7 @@ public class DiscordHandlerTest {
         Flux.interval(Duration.ofMillis(45250))
                 .map(l -> new Heartbeat(seq.get()))
                 .map(GatewayPayload::heartbeat)
-                .subscribe(handler.outbound()::onNext);
+                .subscribe(handler.outbound()::next);
 
         dispatch.ofType(Ready.class).subscribe(ready -> {
             log.info("Gateway received READY!");

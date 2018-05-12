@@ -23,10 +23,7 @@ import discord4j.gateway.payload.PayloadReader;
 import discord4j.gateway.payload.PayloadWriter;
 import discord4j.websocket.*;
 import org.reactivestreams.Publisher;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
-import reactor.core.publisher.MonoProcessor;
-import reactor.core.publisher.UnicastProcessor;
+import reactor.core.publisher.*;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
@@ -37,28 +34,23 @@ import java.util.logging.Level;
  * Represents a websocket handler specialized for Discord gateway operations.
  * <p>
  * It includes a zlib-based decompressor and dedicated handling of closing events that normally occur during Discord
- * gateway lifecycle.
- * <p>
- * This handler provides two {@link reactor.core.publisher.UnicastProcessor} instances for inbound and outbound
- * payload operations. Clients are expected to make proper use of both exchanges, therefore "pull" operations only on
- * the inbound exchange (subscribe), and "push" operations only on the outbound exchange (onNext, onError, onComplete).
+ * gateway lifecycle, and provides methods for inbound and outbound payload operations.
  * <p>
  * The handler also provides two methods to control the lifecycle and proper cleanup, like {@link #close()} and
- * {@link #error(Throwable)} which perform operations over both exchanges and the current
- * {@link discord4j.websocket.WebSocketSession}. It is required to use these methods to signal closure and
- * errors in order to cleanly complete the session.
+ * {@link #error(Throwable)} which perform operations on the current gateway connection. It is required to use these
+ * methods to signal closure and errors in order to cleanly complete the session.
  * <p>
  * All payloads going through this handler are passed to the given {@link discord4j.gateway.payload.PayloadReader}
  * and {@link discord4j.gateway.payload.PayloadWriter}.
  * <h2>Example usage</h2>
  * <pre>
- * // pull operation coming inbound
+ * // pull operation - inbound
  * handler.inbound().subscribe(payload -&gt; {
  *     if (payload.getData() instanceof Hello) {
  *         IdentifyProperties properties = new IdentifyProperties(...);
  *         GatewayPayload&lt;Identify&gt; identify = GatewayPayload.identify(...);
  *
- *         handler.outbound().onNext(identify); // push operation going outbound
+ *         handler.outbound().next(identify); // push operation - outbound
  *     }
  * }, error -&gt; {
  *     log.warn("Gateway connection terminated: {}", error.toString());
@@ -81,6 +73,8 @@ public class DiscordWebSocketHandler implements WebSocketHandler {
 
     private final PayloadReader reader;
     private final PayloadWriter writer;
+    private final FluxSink<GatewayPayload<?>> inboundSink;
+    private final FluxSink<GatewayPayload<?>> outboundSink;
 
     /**
      * Create a new handler with the given payload reader and writer.
@@ -91,6 +85,8 @@ public class DiscordWebSocketHandler implements WebSocketHandler {
     public DiscordWebSocketHandler(PayloadReader reader, PayloadWriter writer) {
         this.reader = reader;
         this.writer = writer;
+        this.inboundSink = inboundExchange.sink(FluxSink.OverflowStrategy.ERROR);
+        this.outboundSink = outboundExchange.sink(FluxSink.OverflowStrategy.LATEST);
     }
 
     @Override
@@ -109,7 +105,7 @@ public class DiscordWebSocketHandler implements WebSocketHandler {
                 .compose(decompressor::completeMessages)
                 .map(reader::read)
                 .log(inboundLogger, Level.FINE, false)
-                .subscribe(inboundExchange::onNext, this::error);
+                .subscribe(inboundSink::next, this::error, inboundSink::complete);
 
         return session.send(outboundExchange.concatMap(this::limitRate)
                 .log(outboundLogger, Level.FINE, false)
@@ -148,8 +144,7 @@ public class DiscordWebSocketHandler implements WebSocketHandler {
     public void close() {
         log.debug("Triggering close sequence");
         completionNotifier.onComplete();
-        outboundExchange.onComplete();
-        inboundExchange.onComplete();
+        outboundSink.complete();
     }
 
     /**
@@ -166,28 +161,24 @@ public class DiscordWebSocketHandler implements WebSocketHandler {
         if (!completionNotifier.isTerminated()) {
             completionNotifier.onError(new CloseException(new CloseStatus(1006, error.toString()), error));
         }
-        outboundExchange.onComplete();
-        inboundExchange.onComplete();
+        outboundSink.complete();
     }
 
     /**
-     * Obtains the processor dedicated to all inbound (coming from the wire) payloads, which is meant to be operated
-     * downstream through pull operators only, i.e. a {@link reactor.core.publisher.UnicastProcessor#subscribe()} call.
+     * Obtains the Flux dedicated to all inbound (from the wire) payloads.
      *
-     * @return the unicast processor with a stream of inbound payloads
+     * @return the stream of inbound payloads
      */
-    public UnicastProcessor<GatewayPayload<?>> inbound() {
+    public Flux<GatewayPayload<?>> inbound() {
         return inboundExchange;
     }
 
     /**
-     * Obtains the processor dedicated to all outbound (going to the wire) payloads, which is meant to be operated
-     * downstream through push operations only, i.e. {@link reactor.core.publisher.UnicastProcessor#onNext(Object)}
-     * calls to supply a new payload.
+     * Obtains a FluxSink dedicated to all outbound (to the wire) payloads.
      *
-     * @return the unicast processor with a stream of outbound payloads
+     * @return the sink to push outbound payloads
      */
-    public UnicastProcessor<GatewayPayload<?>> outbound() {
-        return outboundExchange;
+    public FluxSink<GatewayPayload<?>> outbound() {
+        return outboundSink;
     }
 }

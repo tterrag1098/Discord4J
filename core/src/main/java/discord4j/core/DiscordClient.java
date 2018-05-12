@@ -375,8 +375,9 @@ public final class DiscordClient {
     }
 
     public Mono<Void> updatePresence(final Presence presence) {
-        return Mono.fromRunnable(() -> serviceMediator.getGatewayClient().sender().next(
-                GatewayPayload.statusUpdate(presence.asStatusUpdate())));
+        return serviceMediator.getGatewayClient()
+                .send(Mono.just(GatewayPayload.statusUpdate(presence.asStatusUpdate())))
+                .then();
     }
 
     /**

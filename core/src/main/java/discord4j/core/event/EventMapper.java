@@ -15,19 +15,23 @@
  * along with Discord4J. If not, see <http://www.gnu.org/licenses/>.
  */
 
-package discord4j.rest.request;
+package discord4j.core.event;
 
+import discord4j.core.event.dispatch.DispatchContext;
+import discord4j.core.event.domain.Event;
+import discord4j.gateway.json.dispatch.Dispatch;
 import reactor.core.publisher.Mono;
 
-public interface Router {
+public interface EventMapper {
 
     /**
-     * Queues a request for execution in the appropriate {@link RequestStream request stream}
-     * according to the request's {@link BucketKey bucket}.
+     * Process a {@link discord4j.gateway.json.dispatch.Dispatch} object wrapped with its context to
+     * potentially obtain an {@link discord4j.core.event.domain.Event}.
      *
-     * @param request The request to queue.
-     * @param <T> The request's response type.
-     * @return A mono that receives signals based on the request's response.
+     * @param context the DispatchContext used with this Dispatch object
+     * @param <D> the Dispatch type
+     * @param <E> the resulting Event type
+     * @return an Event mapped from the given Dispatch object, or null if no Event is produced.
      */
-    <T> Mono<T> exchange(DiscordRequest<T> request);
+    <D extends Dispatch, E extends Event> Mono<E> handle(DispatchContext<D> context);
 }

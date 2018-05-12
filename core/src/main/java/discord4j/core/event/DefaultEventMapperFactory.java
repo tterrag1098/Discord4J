@@ -15,19 +15,14 @@
  * along with Discord4J. If not, see <http://www.gnu.org/licenses/>.
  */
 
-package discord4j.rest.request;
+package discord4j.core.event;
 
-import reactor.core.publisher.Mono;
+import discord4j.core.event.dispatch.DispatchHandlers;
 
-public interface Router {
+public class DefaultEventMapperFactory implements EventMapperFactory {
 
-    /**
-     * Queues a request for execution in the appropriate {@link RequestStream request stream}
-     * according to the request's {@link BucketKey bucket}.
-     *
-     * @param request The request to queue.
-     * @param <T> The request's response type.
-     * @return A mono that receives signals based on the request's response.
-     */
-    <T> Mono<T> exchange(DiscordRequest<T> request);
+    @Override
+    public EventMapper getEventMapper() {
+        return new DispatchHandlers();
+    }
 }

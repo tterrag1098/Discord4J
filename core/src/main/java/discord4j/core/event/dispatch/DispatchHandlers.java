@@ -18,6 +18,7 @@ package discord4j.core.event.dispatch;
 
 import discord4j.core.DiscordClient;
 import discord4j.core.ServiceMediator;
+import discord4j.core.event.EventMapper;
 import discord4j.core.event.domain.*;
 import discord4j.core.event.domain.channel.TypingStartEvent;
 import discord4j.core.object.VoiceState;
@@ -39,11 +40,11 @@ import java.util.Map;
  * Registry for {@link discord4j.gateway.json.dispatch.Dispatch} to {@link discord4j.core.event.domain.Event}
  * mapping operations.
  */
-public abstract class DispatchHandlers {
+public class DispatchHandlers implements EventMapper {
 
-    private static final Map<Class<?>, DispatchHandler<?, ?>> handlerMap = new HashMap<>();
+    private final Map<Class<?>, DispatchHandler<?, ?>> handlerMap = new HashMap<>();
 
-    static {
+    public DispatchHandlers() {
         addHandler(ChannelCreate.class, ChannelDispatchHandlers::channelCreate);
         addHandler(ChannelDelete.class, ChannelDispatchHandlers::channelDelete);
         addHandler(ChannelPinsUpdate.class, ChannelDispatchHandlers::channelPinsUpdate);
@@ -81,22 +82,14 @@ public abstract class DispatchHandlers {
         addHandler(GatewayStateChange.class, LifecycleDispatchHandlers::gatewayStateChanged);
     }
 
-    private static <D extends Dispatch, E extends Event> void addHandler(Class<D> dispatchType,
-                                                                         DispatchHandler<D, E> dispatchHandler) {
+    private <D extends Dispatch, E extends Event> void addHandler(Class<D> dispatchType,
+                                                                  DispatchHandler<D, E> dispatchHandler) {
         handlerMap.put(dispatchType, dispatchHandler);
     }
 
-    /**
-     * Process a {@link discord4j.gateway.json.dispatch.Dispatch} object wrapped with its context to
-     * potentially obtain an {@link discord4j.core.event.domain.Event}.
-     *
-     * @param context the DispatchContext used with this Dispatch object
-     * @param <D> the Dispatch type
-     * @param <E> the resulting Event type
-     * @return an Event mapped from the given Dispatch object, or null if no Event is produced.
-     */
+    @Override
     @SuppressWarnings("unchecked")
-    public static <D extends Dispatch, E extends Event> Mono<E> handle(DispatchContext<D> context) {
+    public <D extends Dispatch, E extends Event> Mono<E> handle(DispatchContext<D> context) {
         DispatchHandler<D, E> entry = (DispatchHandler<D, E>) handlerMap.get(context.getDispatch().getClass());
         if (entry == null) {
             return Mono.empty();

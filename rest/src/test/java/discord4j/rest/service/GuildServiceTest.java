@@ -28,6 +28,7 @@ import discord4j.rest.json.request.*;
 import discord4j.rest.json.response.ChannelResponse;
 import discord4j.rest.json.response.GuildResponse;
 import discord4j.rest.request.Router;
+import discord4j.rest.request.DefaultRouter;
 import discord4j.rest.route.Routes;
 import org.junit.Before;
 import org.junit.Test;
@@ -61,7 +62,7 @@ public class GuildServiceTest {
                 .writerStrategy(new EmptyWriterStrategy())
                 .build();
 
-        Router router = new Router(httpClient, Schedulers.elastic());
+        Router router = new DefaultRouter(httpClient, Schedulers.elastic());
         guildService = new GuildService(router);
         channelService = new ChannelService(router);
     }

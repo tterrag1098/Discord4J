@@ -81,7 +81,7 @@ public abstract class PayloadHandlers {
     }
 
     private static void handleInvalidSession(PayloadContext<InvalidSession> context) {
-        GatewayClient client = context.getClient();
+        DefaultGatewayClient client = context.getClient();
         if (context.getData().isResumable()) {
             String token = client.token();
             client.sender().next(GatewayPayload.resume(
@@ -94,7 +94,7 @@ public abstract class PayloadHandlers {
 
     private static void handleHello(PayloadContext<Hello> context) {
         Duration interval = Duration.ofMillis(context.getData().getHeartbeatInterval());
-        GatewayClient client = context.getClient();
+        DefaultGatewayClient client = context.getClient();
         client.heartbeat().start(interval);
 
         if (client.resumable().get()) {
