@@ -1,0 +1,5 @@
+dependencies {
+    compile project(':common')
+
+    compile 'com.discord4j:websocket-client:0.7.7'
+}

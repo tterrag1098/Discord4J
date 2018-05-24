@@ -17,9 +17,15 @@
 package discord4j.core.object.entity;
 
 import discord4j.core.ServiceMediator;
+import discord4j.core.event.domain.VoiceServerUpdateEvent;
+import discord4j.core.event.domain.VoiceStateUpdateEvent;
 import discord4j.core.object.data.stored.VoiceChannelBean;
 import discord4j.core.spec.VoiceChannelEditSpec;
 import discord4j.core.util.EntityUtil;
+import discord4j.gateway.json.GatewayPayload;
+import discord4j.gateway.json.VoiceStateUpdate;
+import discord4j.voice.AudioProvider;
+import discord4j.voice.impl.NoOpAudioProvider;
 import reactor.core.publisher.Mono;
 
 import java.util.function.Consumer;
@@ -89,5 +95,46 @@ public final class VoiceChannel extends BaseGuildChannel {
                 .map(EntityUtil::getChannelBean)
                 .map(bean -> EntityUtil.getChannel(getServiceMediator(), bean))
                 .cast(VoiceChannel.class);
+    }
+
+    public Mono<Void> join() {
+        return join(NoOpAudioProvider.INSTANCE);
+    }
+
+    public Mono<Void> join(AudioProvider audioProvider) {
+        VoiceStateUpdate voiceStateUpdate = new VoiceStateUpdate(getGuildId().asLong(), getId().asLong(), false, false);
+
+        Mono<Void> sendVoiceStateUpdate = Mono.fromRunnable(() ->
+                getServiceMediator().getGatewayClient().sender().next(GatewayPayload.voiceStateUpdate(voiceStateUpdate))
+        );
+
+        Mono<VoiceStateUpdateEvent> waitForVoiceStateUpdate = getClient().getEventDispatcher()
+                .on(VoiceStateUpdateEvent.class)
+                .filter(vsu -> {
+                    long selfId = getServiceMediator().getStateHolder().getSelfId().get();
+                    return vsu.getCurrent().getUserId().asLong() == selfId && vsu.getCurrent().getGuildId().equals(getGuildId());
+                })
+                .next();
+
+        Mono<VoiceServerUpdateEvent> waitForVoiceServerUpdate = getClient().getEventDispatcher()
+                .on(VoiceServerUpdateEvent.class)
+                .filter(vsu -> vsu.getGuildId().equals(getGuildId()))
+                .next();
+
+        return sendVoiceStateUpdate
+                .then(Mono.zip(waitForVoiceStateUpdate, waitForVoiceServerUpdate)) // wait for both in any order
+                .flatMap(t -> {
+                    VoiceStateUpdateEvent stateUpdate = t.getT1();
+                    VoiceServerUpdateEvent serverUpdate = t.getT2();
+
+                    long guildId = getGuildId().asLong();
+                    long selfId = getServiceMediator().getStateHolder().getSelfId().get();
+                    String token = serverUpdate.getToken();
+                    String sessionId = stateUpdate.getCurrent().getSessionId();
+
+                    return getServiceMediator().getVoiceClientFactory()
+                            .getVoiceClient(audioProvider, serverUpdate.getEndpoint(), guildId, selfId, token, sessionId)
+                            .execute();
+                });
     }
 }
