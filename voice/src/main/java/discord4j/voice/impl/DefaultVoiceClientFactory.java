@@ -32,8 +32,10 @@ public class DefaultVoiceClientFactory implements VoiceClientFactory {
     }
 
     @Override
-    public VoiceClient getVoiceClient(AudioProvider audioProvider, String endpoint, long guildId, long userId, String token, String sessionId) {
-        return voiceClients.computeIfAbsent(guildId, k ->
-                new DefaultVoiceClient(payloadReader, payloadWriter, audioProvider, endpoint, guildId, userId, token, sessionId));
+    public VoiceClient getVoiceClient(AudioProvider audioProvider, AudioReceiver audioReceiver, String endpoint,
+                                      long guildId, long userId, String token, String sessionId) {
+
+        return voiceClients.computeIfAbsent(guildId, k -> new DefaultVoiceClient(payloadReader, payloadWriter,
+                audioProvider, audioReceiver, endpoint, guildId, userId, token, sessionId));
     }
 }

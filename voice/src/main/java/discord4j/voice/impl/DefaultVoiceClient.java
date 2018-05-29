@@ -30,6 +30,7 @@ import reactor.util.function.Tuple2;
 public class DefaultVoiceClient implements VoiceClient {
 
     private final AudioProvider audioProvider;
+    private final AudioReceiver audioReceiver;
     private final String endpoint;
     private final VoiceGatewayClient gatewayClient;
     private final VoiceSocket voiceSocket;
@@ -37,9 +38,10 @@ public class DefaultVoiceClient implements VoiceClient {
     private final MonoProcessor onShutdown = MonoProcessor.create(WaitStrategy.parking());
 
     public DefaultVoiceClient(VoicePayloadReader payloadReader, VoicePayloadWriter payloadWriter,
-                              AudioProvider audioProvider, String endpoint, long guildId, long userId, String token,
-                              String sessionId) {
+                              AudioProvider audioProvider, AudioReceiver audioReceiver, String endpoint, long guildId,
+                              long userId, String token, String sessionId) {
         this.audioProvider = audioProvider;
+        this.audioReceiver = audioReceiver;
 
         this.endpoint = endpoint.replace(":80", ""); // Discord sometimes sends the address with the wrong port.
         this.gatewayClient =
@@ -73,7 +75,7 @@ public class DefaultVoiceClient implements VoiceClient {
     }
 
     @Override
-    public void startSendingAudio(byte[] secretKey, int ssrc) {
+    public void startHandlingAudio(byte[] secretKey, int ssrc) {
         final TweetNaclFast.SecretBox boxer = new TweetNaclFast.SecretBox(secretKey);
         final PacketTransformer transformer = new PacketTransformer(ssrc, boxer);
 
@@ -81,7 +83,14 @@ public class DefaultVoiceClient implements VoiceClient {
                 .transform(transformer::send)
                 .subscribe(this::sendAudio);
 
-        onShutdown.doOnTerminate(sender::dispose).subscribe();
+        Disposable receiver = voiceSocket.inbound()
+                .transform(transformer::receive)
+                .subscribe(audioReceiver::receive);
+
+        onShutdown.doOnTerminate(() -> {
+            sender.dispose();
+            receiver.dispose();
+        }).subscribe();
     }
 
     @Override

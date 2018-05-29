@@ -35,7 +35,7 @@ public interface VoiceClient {
 
     void sendAudio(ByteBuf audio);
 
-    void startSendingAudio(byte[] secretKey, int ssrc);
+    void startHandlingAudio(byte[] secretKey, int ssrc);
 
     void shutdown();
 

@@ -16,8 +16,24 @@
  */
 package discord4j.voice;
 
-public interface VoiceClientFactory {
+import io.netty.buffer.ByteBuf;
 
-    VoiceClient getVoiceClient(AudioProvider audioProvider, AudioReceiver audioReceiver, String endpoint, long guildId,
-                               long userId, String token, String sessionId);
+public interface AudioReceiver {
+
+    void receive(char sequence, int timestamp, int ssrc, byte[] audio);
+
+    default void receive(ByteBuf buf) {
+        // skip 2 bytes
+        buf.readByte();
+        buf.readByte();
+
+        char sequence = buf.readChar();
+        int timestamp = buf.readInt();
+        int ssrc = buf.readInt();
+
+        byte[] audio = new byte[buf.readableBytes()];
+        buf.readBytes(audio);
+
+        receive(sequence, timestamp, ssrc, audio);
+    }
 }

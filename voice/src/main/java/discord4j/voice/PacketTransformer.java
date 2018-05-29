@@ -21,18 +21,21 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import reactor.core.publisher.Flux;
 
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 
 public final class PacketTransformer {
 
+    private static final int OPUS_SAMPLE_RATE = 48_000;
+    private static final int OPUS_FRAME_TIME = 20;
+    private static final int OPUS_FRAME_SIZE = 960; //  (48000Hz) / (1s / 20ms)
+
+    private static final int RTP_HEADER_LENGTH = 1 + 1 + 2 + 4 + 4;
+
     private final Flux<byte[]> headers = Flux.<Character, Character>generate(() -> (char) 0, (c, sink) -> {
         sink.next(c);
         return (char) (c + 1);
-    }).map(this::rtpHeader);
+    }).map(this::getRtpHeader);
 
     private final int ssrc;
     private final TweetNaclFast.SecretBox boxer;
@@ -42,48 +45,48 @@ public final class PacketTransformer {
         this.boxer = boxer;
     }
 
-    static FileOutputStream out;
-
-    static {
-        try {
-            out = new FileOutputStream("out.opus");
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-        }
-    }
-
     public Flux<ByteBuf> send(Flux<byte[]> in) {
         return Flux.zip(headers, in)
                 .map(t -> {
                     byte[] rtpHeader = t.getT1();
                     byte[] audio = t.getT2();
 
-                    try {
-                        out.write(audio);
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-
-                    byte[] nonce = new byte[24];
-                    System.arraycopy(rtpHeader, 0, nonce, 0, 12);
-
-                    return newAudioPacket(rtpHeader, boxer.box(audio, nonce));
+                    return getAudioPacket(rtpHeader, boxer.box(audio, getNonce(rtpHeader)));
                 })
                 .map(Unpooled::wrappedBuffer)
-                .delayElements(Duration.ofMillis(20));
+                .delayElements(Duration.ofMillis(OPUS_FRAME_TIME));
     }
 
-    private byte[] rtpHeader(char seq) {
-        return ByteBuffer.allocate(1 + 1 + 2 + 4 + 4)
+    public Flux<ByteBuf> receive(Flux<ByteBuf> in) {
+        return in.map(buf -> {
+            byte[] rtpHeader = new byte[RTP_HEADER_LENGTH];
+            buf.readBytes(rtpHeader);
+
+            byte[] encryptedAudio = new byte[buf.readableBytes()];
+            buf.readBytes(encryptedAudio);
+
+            return boxer.open(encryptedAudio, getNonce(rtpHeader));
+        })
+        .map(Unpooled::wrappedBuffer);
+    }
+
+    private byte[] getNonce(byte[] rtpHeader) {
+        byte[] nonce = new byte[24];
+        System.arraycopy(rtpHeader, 0, nonce, 0, RTP_HEADER_LENGTH);
+        return nonce;
+    }
+
+    private byte[] getRtpHeader(char seq) {
+        return ByteBuffer.allocate(RTP_HEADER_LENGTH)
                 .put((byte) 0x80)
                 .put((byte) 0x78)
                 .putChar(seq)
-                .putInt(seq * 960)
+                .putInt(seq * OPUS_FRAME_TIME)
                 .putInt(ssrc)
                 .array();
     }
 
-    private static byte[] newAudioPacket(byte[] rtpHeader, byte[] encryptedAudio) {
+    private static byte[] getAudioPacket(byte[] rtpHeader, byte[] encryptedAudio) {
         return ByteBuffer.allocate(rtpHeader.length + encryptedAudio.length)
                 .put(rtpHeader)
                 .put(encryptedAudio)

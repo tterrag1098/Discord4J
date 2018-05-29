@@ -16,23 +16,12 @@
  */
 package discord4j.voice;
 
-import com.iwebpp.crypto.TweetNaclFast;
 import discord4j.voice.impl.VoiceSocket;
 import discord4j.voice.json.*;
-import io.netty.buffer.Unpooled;
-import reactor.core.publisher.Flux;
-import reactor.ipc.netty.ByteBufFlux;
 import reactor.util.Logger;
 import reactor.util.Loggers;
 
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.InputStream;
-import java.nio.ByteBuffer;
-import java.nio.file.Paths;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
 
 public abstract class VoicePayloadHandlers {
 
@@ -54,6 +43,7 @@ public abstract class VoicePayloadHandlers {
 
     private static void handleReady(Ready payload, VoiceClient voiceClient, VoiceGatewayClient gateway) {
         log.info("READY");
+        System.out.println(payload);
 
         gateway.getSsrc().set(payload.getSsrc());
 
@@ -68,7 +58,7 @@ public abstract class VoicePayloadHandlers {
         log.info("SESSION DESCRIPTION");
 
         voiceClient.sendGatewayMessage(VoiceGatewayPayload.speaking(true, 0, gateway.getSsrc().get()));
-        voiceClient.startSendingAudio(payload.getSecretKey(), gateway.getSsrc().get());
+        voiceClient.startHandlingAudio(payload.getSecretKey(), gateway.getSsrc().get());
     }
 
     private static void handleSpeaking(Speaking payload, VoiceClient voiceClient) {

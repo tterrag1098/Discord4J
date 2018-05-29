@@ -25,7 +25,7 @@ import discord4j.core.util.EntityUtil;
 import discord4j.gateway.json.GatewayPayload;
 import discord4j.gateway.json.VoiceStateUpdate;
 import discord4j.voice.AudioProvider;
-import discord4j.voice.impl.NoOpAudioProvider;
+import discord4j.voice.AudioReceiver;
 import reactor.core.publisher.Mono;
 
 import java.util.function.Consumer;
@@ -97,11 +97,7 @@ public final class VoiceChannel extends BaseGuildChannel {
                 .cast(VoiceChannel.class);
     }
 
-    public Mono<Void> join() {
-        return join(NoOpAudioProvider.INSTANCE);
-    }
-
-    public Mono<Void> join(AudioProvider audioProvider) {
+    public Mono<Void> join(AudioProvider audioProvider, AudioReceiver audioReceiver) {
         VoiceStateUpdate voiceStateUpdate = new VoiceStateUpdate(getGuildId().asLong(), getId().asLong(), false, false);
 
         Mono<Void> sendVoiceStateUpdate = Mono.fromRunnable(() ->
@@ -133,7 +129,7 @@ public final class VoiceChannel extends BaseGuildChannel {
                     String sessionId = stateUpdate.getCurrent().getSessionId();
 
                     return getServiceMediator().getVoiceClientFactory()
-                            .getVoiceClient(audioProvider, serverUpdate.getEndpoint(), guildId, selfId, token, sessionId)
+                            .getVoiceClient(audioProvider, audioReceiver, serverUpdate.getEndpoint(), guildId, selfId, token, sessionId)
                             .execute();
                 });
     }
