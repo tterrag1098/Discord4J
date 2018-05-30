@@ -23,9 +23,10 @@ import io.netty.buffer.ByteBuf;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
-import reactor.core.publisher.MonoSink;
 import reactor.util.concurrent.WaitStrategy;
 import reactor.util.function.Tuple2;
+
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class DefaultVoiceClient implements VoiceClient {
 
@@ -37,15 +38,14 @@ public class DefaultVoiceClient implements VoiceClient {
 
     private final MonoProcessor onShutdown = MonoProcessor.create(WaitStrategy.parking());
 
-    public DefaultVoiceClient(VoicePayloadReader payloadReader, VoicePayloadWriter payloadWriter,
+    DefaultVoiceClient(VoicePayloadReader payloadReader, VoicePayloadWriter payloadWriter,
                               AudioProvider audioProvider, AudioReceiver audioReceiver, String endpoint, long guildId,
                               long userId, String token, String sessionId) {
         this.audioProvider = audioProvider;
         this.audioReceiver = audioReceiver;
-
         this.endpoint = endpoint.replace(":80", ""); // Discord sometimes sends the address with the wrong port.
-        this.gatewayClient =
-                new VoiceGatewayClient(this, payloadReader, payloadWriter, guildId, userId, token, sessionId);
+
+        this.gatewayClient = new VoiceGatewayClient(this, payloadReader, payloadWriter, guildId, userId, token, sessionId);
         this.voiceSocket = new VoiceSocket();
     }
 
@@ -79,7 +79,21 @@ public class DefaultVoiceClient implements VoiceClient {
         final TweetNaclFast.SecretBox boxer = new TweetNaclFast.SecretBox(secretKey);
         final PacketTransformer transformer = new PacketTransformer(ssrc, boxer);
 
+        final AtomicBoolean speaking = new AtomicBoolean(false);
+
         Disposable sender = audioProvider.flux()
+                .concatMap(audio ->
+                    Mono.fromRunnable(() -> {
+                        if (audio.length == 0 && speaking.get()) {
+                            System.out.println("sending speaking:false");
+                            sendGatewayMessage(VoiceGatewayPayload.speaking(false, 0, ssrc));
+                        } else if (audio.length > 0 && !speaking.get()) {
+                            System.out.println("sending speaking:true");
+                            sendGatewayMessage(VoiceGatewayPayload.speaking(true, 0, ssrc));
+                        }
+                    }).thenReturn(audio)
+                )
+                .filter(audio -> audio.length > 0)
                 .transform(transformer::send)
                 .subscribe(this::sendAudio);
 

@@ -20,7 +20,7 @@ import reactor.core.publisher.Flux;
 
 public interface AudioProvider {
 
-    boolean canProvide();
+    boolean isDone();
 
     byte[] provide();
 
@@ -28,15 +28,14 @@ public interface AudioProvider {
         return Flux.create(sink -> {
             sink.onRequest(requested -> {
                 for (int sent = 0; sent < requested; sent++) {
-                    if (canProvide()) {
-                        sink.next(provide());
-                    } else {
+                    if (isDone()) {
                         sink.complete();
                         break;
+                    } else {
+                        sink.next(provide());
                     }
                 }
             });
         });
     }
-
 }
