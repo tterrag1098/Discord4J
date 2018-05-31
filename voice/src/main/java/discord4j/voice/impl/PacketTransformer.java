@@ -64,8 +64,13 @@ public final class PacketTransformer {
 
             byte[] encryptedAudio = new byte[buf.readableBytes()];
             buf.readBytes(encryptedAudio);
+            byte[] decryptedAudio = boxer.open(encryptedAudio, getNonce(rtpHeader));
 
-            return boxer.open(encryptedAudio, getNonce(rtpHeader));
+            byte[] newPacket = new byte[RTP_HEADER_LENGTH + decryptedAudio.length];
+            System.arraycopy(rtpHeader, 0, newPacket, 0, RTP_HEADER_LENGTH);
+            System.arraycopy(decryptedAudio, 0, newPacket, RTP_HEADER_LENGTH, decryptedAudio.length);
+
+            return newPacket;
         })
         .map(Unpooled::wrappedBuffer);
     }

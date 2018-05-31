@@ -96,8 +96,10 @@ public class DefaultVoiceClient implements VoiceClient {
                 .filter(audio -> audio.length > 0)
                 .transform(transformer::send)
                 .subscribe(this::sendAudio, null, () -> {
-                    sendGatewayMessage(VoiceGatewayPayload.speaking(false, 0, ssrc));
-                    speaking.set(false);
+                    if (speaking.get()) {
+                        sendGatewayMessage(VoiceGatewayPayload.speaking(false, 0, ssrc));
+                        speaking.set(false);
+                    }
                 });
 
         Disposable receiver = voiceSocket.inbound()
