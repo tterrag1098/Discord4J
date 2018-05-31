@@ -81,7 +81,7 @@ public final class PacketTransformer {
                 .put((byte) 0x80)
                 .put((byte) 0x78)
                 .putChar(seq)
-                .putInt(seq * OPUS_FRAME_TIME)
+                .putInt(seq * OPUS_FRAME_SIZE)
                 .putInt(ssrc)
                 .array();
     }

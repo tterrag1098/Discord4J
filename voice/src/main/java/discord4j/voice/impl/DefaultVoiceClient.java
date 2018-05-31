@@ -84,18 +84,21 @@ public class DefaultVoiceClient implements VoiceClient {
         Disposable sender = audioProvider.flux()
                 .concatMap(audio ->
                     Mono.fromRunnable(() -> {
-                        if (audio.length == 0 && speaking.get()) {
-                            System.out.println("sending speaking:false");
+                        if (audio.length == 0 && speaking.get()) { // The previous packet sent was the last in the "batch"
                             sendGatewayMessage(VoiceGatewayPayload.speaking(false, 0, ssrc));
-                        } else if (audio.length > 0 && !speaking.get()) {
-                            System.out.println("sending speaking:true");
+                            speaking.set(false);
+                        } else if (audio.length > 0 && !speaking.get()) { // This packet is the first in the "batch"
                             sendGatewayMessage(VoiceGatewayPayload.speaking(true, 0, ssrc));
+                            speaking.set(true);
                         }
                     }).thenReturn(audio)
                 )
                 .filter(audio -> audio.length > 0)
                 .transform(transformer::send)
-                .subscribe(this::sendAudio);
+                .subscribe(this::sendAudio, null, () -> {
+                    sendGatewayMessage(VoiceGatewayPayload.speaking(false, 0, ssrc));
+                    speaking.set(false);
+                });
 
         Disposable receiver = voiceSocket.inbound()
                 .transform(transformer::receive)
