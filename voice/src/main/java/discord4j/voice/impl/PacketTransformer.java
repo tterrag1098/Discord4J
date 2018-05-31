@@ -46,15 +46,14 @@ public final class PacketTransformer {
     }
 
     public Flux<ByteBuf> send(Flux<byte[]> in) {
-        return Flux.zip(headers, in)
+        return Flux.zip(headers, in, Flux.interval(Duration.ofMillis(OPUS_FRAME_TIME)))
                 .map(t -> {
                     byte[] rtpHeader = t.getT1();
                     byte[] audio = t.getT2();
 
                     return getAudioPacket(rtpHeader, boxer.box(audio, getNonce(rtpHeader)));
                 })
-                .map(Unpooled::wrappedBuffer)
-                .delayElements(Duration.ofMillis(OPUS_FRAME_TIME));
+                .map(Unpooled::wrappedBuffer);
     }
 
     public Flux<ByteBuf> receive(Flux<ByteBuf> in) {
